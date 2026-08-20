@@ -321,27 +321,33 @@
         }
 
         // Animation Loop
-        function animate() {
-            // Ensure width is set
+        // --- WebSocket Connection & Backend Integration ---
+        const ws = new WebSocket("ws://127.0.0.1:8000/ws/telemetry");
+        
+        ws.onopen = () => {
+            console.log("Connected to ShuntWhisper Backend");
+            // Sync initial slider state
+            updateObstruction(slider.value);
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
             if (!width) resizeCanvas();
             
-            const val = parseInt(slider.value);
-            const normalizedVal = val / 100;
-            
-            // --- Update UI Text & States ---
+            const val = parseInt(data.obstruction_level);
             sliderValueDisplay.innerText = val;
             
-            if (val < 50) {
-                // NORMAL STATE (Laminar Flow)
+            // --- Update UI Text & States ---
+            if (data.status === "NORMAL") {
                 diagPanel.className = "glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 glow-normal relative overflow-hidden";
                 statusIcon.innerText = "🟢";
                 statusIcon.style.transform = "scale(1)";
                 
                 statusText.innerText = "FLOW STATUS: NORMAL";
                 statusText.className = "text-2xl md:text-3xl font-extrabold mb-3 neon-text-green text-emerald-400 transition-colors duration-300";
-                statusSubtext.innerText = "Acoustic signature matches personalized baseline. Laminar fluid dynamics detected.";
+                statusSubtext.innerText = `Acoustic signature matches personalized baseline. ${data.fluid_state} fluid dynamics detected.`;
                 
-                let confidence = 99.9 - (normalizedVal * 5); // Drops slightly as it approaches 50
+                let confidence = Math.max(0, (1.0 - data.anomaly_score)) * 100;
                 confScore.innerText = confidence.toFixed(1) + "%";
                 confScore.className = "mono text-emerald-400 font-bold text-xl";
                 confBar.style.width = confidence + "%";
@@ -358,25 +364,22 @@
                 
                 recPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
                 recDot.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
-                
             } else {
-                // ANOMALY STATE (Turbulent Flow)
                 diagPanel.className = "glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 glow-alert relative overflow-hidden";
                 statusIcon.innerText = "🔴";
                 
-                // Intense jitter for icon
-                let jitterX = (Math.random() - 0.5) * 8 * (normalizedVal - 0.5);
-                let jitterY = (Math.random() - 0.5) * 8 * (normalizedVal - 0.5);
+                let jitterX = (Math.random() - 0.5) * 8 * data.anomaly_score;
+                let jitterY = (Math.random() - 0.5) * 8 * data.anomaly_score;
                 statusIcon.style.transform = `scale(1.15) translate(${jitterX}px, ${jitterY}px)`;
                 
                 statusText.innerText = "FLOW ANOMALY DETECTED";
                 statusText.className = "text-2xl md:text-3xl font-extrabold mb-3 neon-text-red text-red-500 transition-colors duration-300";
-                statusSubtext.innerText = "High-frequency turbulence detected. Stricture or severe blockage likely. Immediate review required.";
+                statusSubtext.innerText = `${data.fluid_state} flow detected. High reconstruction loss (${data.reconstruction_loss.toFixed(4)}). Immediate review required.`;
                 
-                let anomalyConf = 75 + (normalizedVal - 0.5) * 2 * 24.9; // Scales up to 99.9%
-                confScore.innerText = anomalyConf.toFixed(1) + "%";
+                let confidence = data.anomaly_score * 100;
+                confScore.innerText = confidence.toFixed(1) + "%";
                 confScore.className = "mono text-red-400 font-bold text-xl";
-                confBar.style.width = anomalyConf + "%";
+                confBar.style.width = confidence + "%";
                 confBar.className = "bg-gradient-to-r from-red-600 to-red-400 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(239,68,68,0.8)]";
                 
                 headerBar.className = "absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500 opacity-90 animate-pulse";
@@ -392,51 +395,28 @@
                 recDot.className = "relative inline-flex rounded-full h-3 w-3 bg-red-500";
             }
 
-            // --- Math for Signal Generation ---
-            // 1. Base pulse (Heartbeat / fluid pump action)
-            let basePulseFreq = 0.03;
-            let baseAmplitude = 30 - (normalizedVal * 20); // Amplitude drops as it clogs
-            let pulse = Math.sin(time * basePulseFreq) * baseAmplitude;
-            
-            // Add a secondary harmonic to make it look biological/fluidic
-            pulse += Math.sin(time * basePulseFreq * 2.5) * (baseAmplitude * 0.3);
-
-            // 2. Low-level systemic noise
-            let baseNoise = (Math.random() - 0.5) * 4;
-            
-            // 3. Turbulence (Jagged noise that scales exponentially with restriction)
-            let turbulenceAmplitude = val < 50 ? (normalizedVal * 8) : (Math.pow(normalizedVal, 3) * 120);
-            let turbulence = (Math.random() - 0.5) * 2 * turbulenceAmplitude;
-            
-            // 4. High-frequency stricture hiss (appears only at high blockages)
-            let hissAmplitude = val >= 50 ? (normalizedVal - 0.5) * 2 * 50 : 0;
-            // High freq sine combined with random switching
-            let hiss = Math.sin(time * 0.9) * hissAmplitude * (Math.random() > 0.3 ? 1 : -1);
-
-            let currentSignal = pulse + baseNoise + turbulence + hiss;
-            
-            // Update array (shift left)
-            waveHistory.push(currentSignal);
+            // --- Update Waveform Array ---
+            for (let point of data.raw_waveform) {
+                waveHistory.push(point * 150); // Scale multiplier for visuals
+            }
             if (waveHistory.length > maxHistory) {
-                waveHistory.shift();
+                waveHistory = waveHistory.slice(waveHistory.length - maxHistory);
             }
 
             // --- Draw Live Waveform ---
             ctx.clearRect(0, 0, width, height);
-            
             ctx.beginPath();
             
-            // Styling based on state
             if (val < 50) {
-                ctx.strokeStyle = '#34d399'; // Emerald-400
+                ctx.strokeStyle = '#34d399';
                 ctx.shadowColor = 'rgba(16, 185, 129, 0.8)';
                 ctx.lineWidth = 2.5;
                 ctx.shadowBlur = 12;
             } else {
-                ctx.strokeStyle = '#ef4444'; // Red-500
+                ctx.strokeStyle = '#ef4444';
                 ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
-                ctx.lineWidth = 2 + (normalizedVal * 2.5); // Thicker line when chaotic
-                ctx.shadowBlur = 15 + (normalizedVal * 10);
+                ctx.lineWidth = 2 + ((val/100) * 2.5);
+                ctx.shadowBlur = 15 + ((val/100) * 10);
             }
 
             const centerY = height / 2;
@@ -445,30 +425,18 @@
             for (let i = 0; i < waveHistory.length; i++) {
                 let x = i * stepX;
                 let y = centerY - waveHistory[i];
-                
-                // Soft clipping to keep within canvas bounds
                 let padding = 10;
                 y = Math.max(padding, Math.min(height - padding, y));
                 
                 if (i === 0) {
                     ctx.moveTo(x, y);
                 } else {
-                    // Smooth line with bezier curves for laminar, straight lines for turbulent
-                    if (val < 50) {
-                        let prevX = (i - 1) * stepX;
-                        let prevY = centerY - waveHistory[i - 1];
-                        prevY = Math.max(padding, Math.min(height - padding, prevY));
-                        
-                        let cpX = prevX + (x - prevX) / 2;
-                        ctx.quadraticCurveTo(prevX, prevY, x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
+                    ctx.lineTo(x, y);
                 }
             }
             ctx.stroke();
 
-            // Draw current point glow head
+            // Glow head
             const lastY = Math.max(10, Math.min(height - 10, centerY - waveHistory[waveHistory.length - 1]));
             ctx.beginPath();
             ctx.arc(width, lastY, val < 50 ? 4 : 6, 0, Math.PI * 2);
@@ -477,38 +445,19 @@
             ctx.stroke();
 
             // --- Update Spectrogram ---
+            const fft = data.fft_spectrum;
             for (let i = 0; i < numBars; i++) {
-                let barHeight = 2; // Minimum height
-                let factor = i / numBars; // 0 (low freq) to 1 (high freq)
+                let fftIndex = Math.floor((i / numBars) * fft.length);
+                let rawEnergy = fft[fftIndex] || 0;
+                
+                // Adjust scaling specifically for UI
+                let barHeight = Math.min(100, Math.max(2, rawEnergy * 8)); 
                 
                 if (val < 50) {
-                    // Normal state: Heartbeat dominates low freq
-                    if (factor < 0.2) { // 0 - 4kHz approx
-                        // Base pulse energy
-                        barHeight = 5 + Math.random() * 25 * (1 - factor*2);
-                    } else {
-                        // Very low noise floor
-                        barHeight = 2 + Math.random() * 4;
-                    }
-                    
                     bars[i].className = 'flex-1 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-75';
                     bars[i].style.boxShadow = '0 -4px 10px rgba(16, 185, 129, 0.3)';
                     bars[i].style.opacity = '0.9';
                 } else {
-                    // Anomaly state: Broadband turbulence and high freq hissing
-                    if (factor < 0.2) {
-                        // Low end drops slightly in energy but becomes chaotic
-                        barHeight = 10 + Math.random() * 20;
-                    } else if (factor >= 0.2 && factor < 0.6) {
-                        // Mid-band turbulence
-                        barHeight = 15 + Math.random() * 40 * normalizedVal;
-                    } else {
-                        // High freq stricture hiss (shoots up aggressively)
-                        let hissEnergy = (factor - 0.5) * 2; // 0 to 1 scaling in upper half
-                        barHeight = 10 + Math.random() * (hissEnergy * 150 * normalizedVal);
-                    }
-                    
-                    // Color mapping based on energy (height)
                     if (barHeight > 65) {
                         bars[i].className = 'flex-1 bg-gradient-to-t from-red-600 to-red-400 rounded-t-sm transition-all duration-75';
                         bars[i].style.boxShadow = '0 -5px 15px rgba(239, 68, 68, 0.6)';
@@ -522,21 +471,37 @@
                     bars[i].style.opacity = '1';
                 }
                 
-                // Add a tiny bit of smoothing to the visual drop-off so it doesn't flicker too harshly
-                let currentHeight = parseFloat(bars[i].style.height) || 0;
-                if (barHeight < currentHeight) {
-                    barHeight = currentHeight - (currentHeight - barHeight) * 0.5; // decay factor
-                }
-                
-                barHeight = Math.min(100, barHeight);
                 bars[i].style.height = `${barHeight}%`;
             }
+        };
 
-            time += 1;
-            requestAnimationFrame(animate);
+        ws.onclose = () => {
+            console.warn("Disconnected from Backend.");
+            statusText.innerText = "CONNECTION LOST";
+            statusText.className = "text-2xl md:text-3xl font-extrabold mb-3 text-slate-500 transition-colors duration-300";
+            statusSubtext.innerText = "WebSocket disconnected. Please ensure the backend is running.";
+            diagPanel.className = "glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 border-slate-700 relative overflow-hidden";
+            statusIcon.innerText = "🔌";
+            statusIcon.style.transform = "scale(1)";
+        };
+
+        // Handle Slider Changes via HTTP API
+        let debounceTimer;
+        function updateObstruction(level) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                fetch("http://127.0.0.1:8000/api/set-obstruction", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ obstruction_level: parseFloat(level) })
+                }).catch(e => console.error("Error setting obstruction:", e));
+            }, 50);
         }
 
-        // Start animation loop
+        slider.addEventListener('input', (e) => {
+            sliderValueDisplay.innerText = e.target.value;
+            updateObstruction(e.target.value);
+        });
         animate();
     </script>
 </body>
