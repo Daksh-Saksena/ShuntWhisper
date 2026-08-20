@@ -451,8 +451,12 @@
                 }
                 let rawZ = Math.sqrt(sumSq); // Euclidean distance across normalized dimensions
                 
-                // Exponential Moving Average to smooth out instantaneous frame noise
-                smoothedZScore = smoothedZScore * 0.95 + rawZ * 0.05; 
+                // Asymmetric Exponential Moving Average: Smooth rise, very fast fall
+                if (rawZ < smoothedZScore) {
+                    smoothedZScore = smoothedZScore * 0.5 + rawZ * 0.5; // Snap back quickly to normal
+                } else {
+                    smoothedZScore = smoothedZScore * 0.85 + rawZ * 0.15; // Smooth out noise on the way up
+                } 
             } else {
                 smoothedZScore = 0;
             }
