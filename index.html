@@ -268,6 +268,7 @@
         let isCalibrating = false;
         let calibrationBuffer = [];
         const THRESHOLD_Z = 2.5; // Z-Score anomaly threshold
+        let smoothedZScore = 0; // Prevent UI flickering
 
 
 
@@ -356,7 +357,8 @@
             }
             for (let j = 0; j < numFeatures; j++) {
                 std[j] = Math.sqrt(std[j] / N);
-                if (std[j] < 0.0001) std[j] = 0.0001; // Prevent division by zero
+                // Prevent division by zero and enforce a minimum variance baseline to stop glitching
+                std[j] = Math.max(std[j], Math.abs(mean[j]) * 0.05, 0.1); 
             }
             
             baseline = { mean, std };
@@ -447,8 +449,15 @@
                     let z = (currentFeatures[i] - baseline.mean[i]) / baseline.std[i];
                     sumSq += (z * z);
                 }
-                zScore = Math.sqrt(sumSq); // Euclidean distance across normalized dimensions
+                let rawZ = Math.sqrt(sumSq); // Euclidean distance across normalized dimensions
+                
+                // Exponential Moving Average to smooth out instantaneous frame noise
+                smoothedZScore = smoothedZScore * 0.95 + rawZ * 0.05; 
+            } else {
+                smoothedZScore = 0;
             }
+            
+            zScore = smoothedZScore; // Use smoothed Z-score for all UI updates below
 
             // 5. Update AI Diagnosis UI
             const diagPanel = document.getElementById('diagnosis-panel');
