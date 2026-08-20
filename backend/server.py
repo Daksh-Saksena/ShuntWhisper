@@ -6,8 +6,17 @@ from typing import List
 from physics_engine import FluidAcousticSimulator
 from dsp_pipeline import AcousticDSP
 from ml_engine import ShuntAnomalyDetector
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="ShuntWhisper Edge-AI Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 simulator = FluidAcousticSimulator(sample_rate=16000)
 dsp = AcousticDSP(sample_rate=16000)
