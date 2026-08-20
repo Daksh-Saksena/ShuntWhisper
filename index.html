@@ -77,6 +77,29 @@
     <div class="fixed inset-0 z-[-1] opacity-[0.03]" style="background-image: linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px); background-size: 40px 40px;"></div>
     <div class="fixed inset-0 z-[-2] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/40 via-[#0B1120] to-[#0B1120]"></div>
 
+    <!-- WebBLE Connection Overlay -->
+    <div id="ble-overlay" class="fixed inset-0 z-[100] bg-[#0B1120]/90 backdrop-blur-md flex flex-col justify-center items-center transition-opacity duration-700">
+        <div class="glass p-10 rounded-3xl flex flex-col items-center max-w-md text-center border border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-blue-400 mb-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+            </svg>
+            
+            <h2 class="text-3xl font-extrabold text-white mb-2">Connect Device</h2>
+            <p class="text-slate-400 mb-8 text-sm">Pair with ShuntWhisper ESP32 Edge Node via WebBLE to stream live telemetry and ML inference.</p>
+            
+            <button id="btn-ble-connect" class="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 uppercase tracking-widest text-sm">
+                Scan & Pair ESP32
+            </button>
+            
+            <div id="ble-status" class="mt-6 text-xs mono text-blue-300 hidden">
+                <span class="inline-block w-2 h-2 rounded-full bg-blue-400 animate-ping mr-2"></span>
+                Negotiating GATT Characteristics...
+            </div>
+        </div>
+    </div>
+
     <!-- Discreet Small Top-Right Trigger Button -->
     <button id="btn-trigger-anomaly" class="fixed top-3 right-3 z-50 glass px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 hover:border-red-500/60 rounded-full text-red-400 hover:text-white font-semibold text-[10px] mono uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-90 cursor-pointer shadow-lg backdrop-blur-md opacity-70 hover:opacity-100" title="Inject 0.3s Acoustic Anomaly">
         <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
@@ -118,14 +141,14 @@
                 <div id="status-icon" class="text-6xl mb-4 transition-transform duration-300 drop-shadow-2xl">⚪</div>
                 
                 <h2 id="status-text" class="text-2xl font-extrabold mb-2 text-slate-500 transition-colors duration-300">
-                    AI UNAVAILABLE
+                    AWAITING TELEMETRY
                 </h2>
                 <div id="status-badge" class="bg-slate-900/50 text-slate-400 border border-slate-700/50 px-3 py-1 rounded-full text-xs font-bold mb-4 tracking-wide uppercase">
-                    UNCALIBRATED
+                    OFFLINE
                 </div>
                 
                 <p id="status-subtext" class="text-slate-400 text-sm leading-relaxed transition-colors duration-300 px-2 font-medium">
-                    Acoustic baseline not calibrated. Please click 'Learn 24h Baseline' below to establish mathematical threshold.
+                    Waiting for WebBLE connection to ESP32 node...
                 </p>
                 
                 <!-- Z-Score Meter -->
@@ -144,23 +167,6 @@
                         <span>Z=2.5 (Threshold)</span>
                         <span>Z=5+ (Severe)</span>
                     </div>
-                </div>
-            </div>
-
-            <!-- CALIBRATION BUTTON -->
-            <button id="btn-calibrate" class="glass rounded-xl p-4 w-full bg-blue-600/20 hover:bg-blue-500/30 border border-blue-500/50 transition-all active:scale-95 flex items-center justify-center gap-3 group shadow-[0_0_15px_rgba(59,130,246,0.2)]">
-                <span class="text-2xl group-hover:animate-pulse">🔵</span>
-                <span class="font-bold text-blue-100 tracking-wide">Calibrate / Learn 24h Baseline</span>
-            </button>
-            
-            <!-- CALIBRATION STATUS (Hidden by default) -->
-            <div id="calib-status-box" class="hidden glass rounded-xl p-4 border border-indigo-500/50 bg-indigo-900/20 shadow-[0_0_20px_rgba(79,70,229,0.3)]">
-                <div class="flex justify-between items-center mb-2">
-                    <span id="calib-text" class="text-xs font-bold text-indigo-300 uppercase tracking-wide">Sampling Acoustic Baseline...</span>
-                    <span id="calib-pct" class="text-xs font-bold mono text-indigo-200">0%</span>
-                </div>
-                <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-700">
-                    <div id="calib-bar" class="bg-indigo-500 h-full progress-bar-animated" style="width: 0%"></div>
                 </div>
             </div>
             
@@ -227,6 +233,32 @@
 
 
     <script>
+        // --- WebBLE CONNECTION MOCKUP ---
+        let isConnected = false;
+        document.getElementById('btn-ble-connect').addEventListener('click', () => {
+            const btn = document.getElementById('btn-ble-connect');
+            const status = document.getElementById('ble-status');
+            btn.classList.add('hidden');
+            status.classList.remove('hidden');
+            
+            // Simulate GATT connection sequence
+            setTimeout(() => { status.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-blue-400 mr-2"></span>Connected to ShuntWhisper_#HW8492'; }, 800);
+            setTimeout(() => { status.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-ping mr-2"></span>Subscribing to UUID 4faf...'; }, 1500);
+            setTimeout(() => {
+                document.getElementById('ble-overlay').classList.add('opacity-0');
+                setTimeout(() => {
+                    document.getElementById('ble-overlay').classList.add('hidden');
+                    isConnected = true;
+                    // Initialize Baseline to match ESP32 embedded weights
+                    baseline = { 
+                        mean: [0.45, 0.22, 0.18], 
+                        std: [0.05, 0.08, 0.03] 
+                    };
+                    requestAnimationFrame(animate);
+                }, 700);
+            }, 2500);
+        });
+
         // --- LIVE CLOCK ---
         setInterval(() => document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-US', { hour12: false }), 1000);
 
@@ -279,50 +311,8 @@
 
         // --- AI & Z-SCORE BASELINE STATE ---
         let baseline = null; // Will store { mean: [f1, f2, f3], std: [f1, f2, f3] }
-        let isCalibrating = false;
-        let calibrationBuffer = [];
         const THRESHOLD_Z = 2.5; // Z-Score anomaly threshold
         let smoothedZScore = 0; // Prevent UI flickering
-
-
-
-        // --- CALIBRATION LOGIC ---
-        document.getElementById('btn-calibrate').addEventListener('click', () => {
-            if(isCalibrating) return;
-            isCalibrating = true;
-            calibrationBuffer = [];
-            
-            const btn = document.getElementById('btn-calibrate');
-            const statusBox = document.getElementById('calib-status-box');
-            const calibText = document.getElementById('calib-text');
-            const calibBar = document.getElementById('calib-bar');
-            
-            btn.classList.add('hidden');
-            statusBox.classList.remove('hidden');
-            calibText.innerText = 'Sampling Patient Acoustic Baseline...';
-            calibBar.style.width = '0%';
-            
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 100 / (3000 / 33); // 3 seconds total at ~30 ticks/sec
-                calibBar.style.width = Math.min(100, progress) + '%';
-                document.getElementById('calib-pct').innerText = Math.min(100, Math.floor(progress)) + '%';
-                
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    finishCalibration();
-                    
-                    calibText.innerText = '✅ Baseline Calibrated';
-                    calibBar.className = 'bg-emerald-500 h-full';
-                    
-                    setTimeout(() => {
-                        statusBox.classList.add('hidden');
-                        btn.classList.remove('hidden');
-                        calibBar.className = 'bg-indigo-500 h-full progress-bar-animated'; // reset for next time
-                    }, 2000);
-                }
-            }, 33);
-        });
 
         // Computes 3 mathematical features from raw waveform chunk
         function extractFeatures(signalArray) {
@@ -344,39 +334,6 @@
             
             const rms = Math.sqrt(sumSq / signalArray.length);
             return [rms, zeroCrossings, highFreqEnergy];
-        }
-
-        function finishCalibration() {
-            if (calibrationBuffer.length === 0) return;
-            
-            const numFeatures = calibrationBuffer[0].length;
-            const N = calibrationBuffer.length;
-            
-            const mean = new Array(numFeatures).fill(0);
-            const std = new Array(numFeatures).fill(0);
-            
-            // Calculate Mean (μ)
-            for (let i = 0; i < N; i++) {
-                for (let j = 0; j < numFeatures; j++) {
-                    mean[j] += calibrationBuffer[i][j];
-                }
-            }
-            for (let j = 0; j < numFeatures; j++) mean[j] /= N;
-            
-            // Calculate Variance / StdDev (σ)
-            for (let i = 0; i < N; i++) {
-                for (let j = 0; j < numFeatures; j++) {
-                    std[j] += Math.pow(calibrationBuffer[i][j] - mean[j], 2);
-                }
-            }
-            for (let j = 0; j < numFeatures; j++) {
-                std[j] = Math.sqrt(std[j] / N);
-                // Prevent division by zero and enforce a minimum variance baseline to stop glitching
-                std[j] = Math.max(std[j], Math.abs(mean[j]) * 0.05, 0.1); 
-            }
-            
-            baseline = { mean, std };
-            isCalibrating = false;
         }
 
         // Mathematical Pseudo-FFT logic for visual spectrogram
@@ -450,13 +407,9 @@
             // 3. Mathematical Feature Extraction
             const currentFeatures = extractFeatures(waveHistory);
             
-            if (isCalibrating) {
-                calibrationBuffer.push(currentFeatures);
-            }
-            
             // 4. True AI Z-Score Anomaly Detection
             let zScore = 0;
-            if (baseline && !isCalibrating) {
+            if (baseline) {
                 let sumSq = 0;
                 for(let i = 0; i < currentFeatures.length; i++) {
                     // Z = (x - μ) / σ
@@ -495,8 +448,6 @@
             
             if (!baseline) {
                 // Keep Uncalibrated State UI
-            } else if (isCalibrating) {
-                // Neutral during calibration
             } else {
                 if (zScore <= THRESHOLD_Z) {
                     // NORMAL (Z <= 2.5)
@@ -606,9 +557,6 @@
 
             requestAnimationFrame(animate);
         }
-
-        // --- INITIALIZATION ---
-        animate();
     </script>
 </body>
 </html>
