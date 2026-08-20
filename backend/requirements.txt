@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+websockets
+numpy
+scipy
+torch
+scikit-learn
