@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShuntWhisper: Edge-AI Acoustic Monitoring</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #050a15; 
+            color: #e2e8f0; 
+            overflow-x: hidden; 
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .glass {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* Custom range slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            width: 28px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -12px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.9);
+            transition: transform 0.1s, box-shadow 0.3s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        .glow-normal {
+            box-shadow: 0 0 40px rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.4);
+        }
+        
+        .glow-alert {
+            box-shadow: 0 0 50px rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.7);
+            animation: pulse-red 1.2s infinite alternate ease-in-out;
+        }
+
+        @keyframes pulse-red {
+            from { box-shadow: 0 0 30px rgba(239, 68, 68, 0.2); }
+            to { box-shadow: 0 0 70px rgba(239, 68, 68, 0.5); }
+        }
+
+        .neon-text-green { text-shadow: 0 0 15px rgba(16, 185, 129, 0.7); }
+        .neon-text-red { text-shadow: 0 0 15px rgba(239, 68, 68, 0.8); }
+        
+        /* Subtle grid background for the whole page */
+        .page-bg {
+            background-image: 
+                radial-gradient(ellipse at top, rgba(30, 41, 59, 0.5) 0%, transparent 70%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 md:p-6 lg:p-8 bg-[#050a15] page-bg">
+    
+    <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
+        
+        <!-- HEADER -->
+        <header class="lg:col-span-3 glass rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-500 opacity-70" id="header-bar"></div>
+            
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-700/50 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-emerald-400" id="logo-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-white mb-1">
+                        ShuntWhisper
+                    </h1>
+                    <p class="text-emerald-400 text-sm md:text-base font-medium tracking-wide uppercase" id="subtitle-text">Live Edge-AI Acoustic Telemetry</p>
+                </div>
+            </div>
+            
+            <div class="mt-6 md:mt-0 w-full md:w-auto bg-slate-900/60 p-4 rounded-xl border border-slate-700/50">
+                <div class="grid grid-cols-2 md:flex md:flex-col gap-x-8 gap-y-2 text-xs md:text-sm mono">
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-slate-500">PATIENT_ID:</span>
+                        <span class="text-white font-bold" id="patient-id-display">SW-8492-X</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4">
+                        <span class="text-slate-500">BASELINE_EST:</span>
+                        <span class="text-slate-300" id="baseline-time"></span>
+                    </div>
+                    <div class="flex items-center justify-between gap-4 col-span-2 md:col-span-1 border-t border-slate-800 pt-2 md:border-t-0 md:pt-0 mt-2 md:mt-0">
+                        <span class="text-slate-500">SYS_UPTIME:</span>
+                        <span class="text-blue-400 font-bold tracking-widest" id="uptime">00:00:00</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- LEFT COLUMN: DIAGNOSIS & SENSOR -->
+        <div class="lg:col-span-1 flex flex-col gap-6">
+            
+            <!-- EDGE AI DIAGNOSIS PANEL -->
+            <div id="diagnosis-panel" class="glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 glow-normal relative overflow-hidden">
+                <!-- Decorative background elements -->
+                <div class="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl" id="diag-glow-1"></div>
+                <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl" id="diag-glow-2"></div>
+                
+                <div id="status-icon" class="text-7xl mb-6 transition-transform duration-300 drop-shadow-2xl">🟢</div>
+                
+                <h2 id="status-text" class="text-2xl md:text-3xl font-extrabold mb-3 neon-text-green text-emerald-400 transition-colors duration-300">
+                    FLOW STATUS: NORMAL
+                </h2>
+                
+                <p id="status-subtext" class="text-slate-300 text-sm md:text-base leading-relaxed transition-colors duration-300 px-2 font-medium">
+                    Acoustic signature matches personalized baseline. Laminar fluid dynamics detected.
+                </p>
+                
+                <div class="mt-8 w-full bg-slate-900/80 rounded-xl p-5 border border-slate-700/50 shadow-inner">
+                    <div class="flex justify-between items-end mb-3">
+                        <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">AI Confidence Score</span>
+                        <span id="confidence-score" class="mono text-emerald-400 font-bold text-xl">99.8%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-900">
+                        <div id="confidence-bar" class="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-300" style="width: 99.8%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SENSOR SIMULATOR (Slider) -->
+            <div class="glass rounded-2xl p-6 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl"></div>
+                
+                <div class="flex justify-between items-center mb-8 relative z-10">
+                    <h3 class="text-lg font-semibold text-white tracking-wide">Sensor Simulator</h3>
+                    <div class="bg-slate-900 px-4 py-1.5 rounded-lg border border-slate-700 mono shadow-inner flex items-center gap-1">
+                        <span class="text-slate-500 text-xs mr-1">VAL:</span>
+                        <span id="slider-value" class="text-blue-400 font-bold text-lg">0</span>
+                        <span class="text-slate-500">%</span>
+                    </div>
+                </div>
+                
+                <div class="relative z-10 px-2">
+                    <input type="range" id="turbulence-slider" min="0" max="100" value="0" class="w-full">
+                    <div class="flex justify-between text-xs text-slate-400 mt-4 font-bold tracking-wider">
+                        <span class="text-emerald-400/80">0% (CLEAR)</span>
+                        <span class="text-slate-500">Simulated Obstruction</span>
+                        <span class="text-red-400/80">100% (BLOCKED)</span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- RIGHT COLUMN: VISUALIZATIONS -->
+        <div class="lg:col-span-2 flex flex-col gap-6">
+            
+            <!-- LIVE WAVEFORM -->
+            <div class="glass rounded-2xl p-1 flex flex-col h-[320px]">
+                <div class="p-5 pb-3 flex justify-between items-center bg-slate-800/30 rounded-t-2xl border-b border-slate-700/50">
+                    <h3 class="text-lg font-semibold text-white flex items-center gap-3 tracking-wide">
+                        <div class="relative flex h-3 w-3">
+                          <span id="rec-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span id="rec-dot" class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                        </div>
+                        Live Acoustic Waveform
+                    </h3>
+                    <div class="flex gap-2">
+                        <span class="mono text-xs text-slate-400 bg-slate-900 px-3 py-1.5 rounded border border-slate-700 shadow-inner">250 ms/div</span>
+                        <span class="mono text-xs text-slate-400 bg-slate-900 px-3 py-1.5 rounded border border-slate-700 shadow-inner">10 mV/div</span>
+                    </div>
+                </div>
+                
+                <div class="flex-grow relative bg-[#0a0f1c] rounded-b-xl overflow-hidden m-1" id="waveform-container">
+                    <!-- Scope Grid background -->
+                    <div class="absolute inset-0 opacity-[0.15]" 
+                         style="background-image: 
+                            linear-gradient(rgba(148, 163, 184, 0.5) 1px, transparent 1px), 
+                            linear-gradient(90deg, rgba(148, 163, 184, 0.5) 1px, transparent 1px); 
+                            background-size: 50px 50px;
+                            background-position: center center;">
+                    </div>
+                    <!-- Center lines -->
+                    <div class="absolute top-1/2 left-0 w-full h-[1px] bg-slate-500/30"></div>
+                    <div class="absolute top-0 left-1/2 w-[1px] h-full bg-slate-500/30"></div>
+                    
+                    <canvas id="waveform-canvas" class="absolute inset-0 w-full h-full"></canvas>
+                    
+                    <!-- Glow overlays -->
+                    <div class="absolute inset-0 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] pointer-events-none"></div>
+                </div>
+            </div>
+
+            <!-- SPECTROGRAM / FREQUENCY BARS -->
+            <div class="glass rounded-2xl p-1 flex flex-col h-[280px]">
+                <div class="p-5 pb-3 flex justify-between items-center bg-slate-800/30 rounded-t-2xl border-b border-slate-700/50">
+                    <h3 class="text-lg font-semibold text-white tracking-wide">Real-time FFT Spectrum</h3>
+                    <div class="flex gap-3 items-center">
+                        <span class="text-xs font-semibold text-slate-500">FREQ RANGE:</span>
+                        <span class="mono text-xs text-emerald-400 bg-slate-900 px-3 py-1.5 rounded border border-slate-700 shadow-inner">0 Hz - 20 kHz</span>
+                    </div>
+                </div>
+                
+                <div class="flex-grow relative bg-[#0a0f1c] rounded-b-xl overflow-hidden flex flex-col m-1">
+                    <!-- Background guidelines -->
+                    <div class="absolute inset-0 flex flex-col justify-between py-4 opacity-20 pointer-events-none z-0">
+                        <div class="w-full border-t border-slate-500 border-dashed"></div>
+                        <div class="w-full border-t border-slate-500 border-dashed"></div>
+                        <div class="w-full border-t border-slate-500 border-dashed"></div>
+                        <div class="w-full border-t border-slate-500 border-dashed"></div>
+                    </div>
+                    
+                    <div class="flex-grow flex items-end p-2 gap-[2px] md:gap-1 z-10" id="spectrogram-container">
+                        <!-- Bars will be injected here via JS -->
+                    </div>
+                    
+                    <!-- X-axis labels -->
+                    <div class="h-6 w-full flex justify-between px-2 text-[10px] text-slate-500 mono font-bold bg-slate-900/50 border-t border-slate-800/80 items-center">
+                        <span>0Hz</span>
+                        <span>5kHz</span>
+                        <span>10kHz</span>
+                        <span>15kHz</span>
+                        <span>20kHz</span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <script>
+        // Setup static data (Timestamps and Uptime)
+        const now = new Date();
+        document.getElementById('baseline-time').innerText = now.toISOString().split('T')[0] + " " + now.toTimeString().split(' ')[0];
+
+        let startTime = Date.now() - (Math.random() * 10000000); // Randomize start time slightly to look active
+        setInterval(() => {
+            let diff = Math.floor((Date.now() - startTime) / 1000);
+            let h = String(Math.floor(diff / 3600)).padStart(2, '0');
+            let m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            let s = String(diff % 60).padStart(2, '0');
+            document.getElementById('uptime').innerText = `${h}:${m}:${s}`;
+        }, 1000);
+
+        // UI Elements
+        const slider = document.getElementById('turbulence-slider');
+        const sliderValueDisplay = document.getElementById('slider-value');
+        
+        const diagPanel = document.getElementById('diagnosis-panel');
+        const statusIcon = document.getElementById('status-icon');
+        const statusText = document.getElementById('status-text');
+        const statusSubtext = document.getElementById('status-subtext');
+        const confScore = document.getElementById('confidence-score');
+        const confBar = document.getElementById('confidence-bar');
+        
+        const headerBar = document.getElementById('header-bar');
+        const logoIcon = document.getElementById('logo-icon');
+        const subtitleText = document.getElementById('subtitle-text');
+        const diagGlow1 = document.getElementById('diag-glow-1');
+        const diagGlow2 = document.getElementById('diag-glow-2');
+        
+        const recPing = document.getElementById('rec-ping');
+        const recDot = document.getElementById('rec-dot');
+
+        // Waveform Canvas Setup
+        const canvas = document.getElementById('waveform-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        const maxHistory = 400; // Resolution of the line
+        let waveHistory = new Array(maxHistory).fill(0);
+        let time = 0;
+
+        function resizeCanvas() {
+            const container = document.getElementById('waveform-container');
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        // Initial sizing timeout to ensure CSS has applied
+        setTimeout(resizeCanvas, 100);
+
+        // Spectrogram Setup
+        const numBars = 64;
+        const spectrogramContainer = document.getElementById('spectrogram-container');
+        const bars = [];
+        for (let i = 0; i < numBars; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'flex-1 bg-emerald-500 rounded-t-sm transition-all duration-75';
+            bar.style.height = '5%';
+            spectrogramContainer.appendChild(bar);
+            bars.push(bar);
+        }
+
+        // Animation Loop
+        function animate() {
+            // Ensure width is set
+            if (!width) resizeCanvas();
+            
+            const val = parseInt(slider.value);
+            const normalizedVal = val / 100;
+            
+            // --- Update UI Text & States ---
+            sliderValueDisplay.innerText = val;
+            
+            if (val < 50) {
+                // NORMAL STATE (Laminar Flow)
+                diagPanel.className = "glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 glow-normal relative overflow-hidden";
+                statusIcon.innerText = "🟢";
+                statusIcon.style.transform = "scale(1)";
+                
+                statusText.innerText = "FLOW STATUS: NORMAL";
+                statusText.className = "text-2xl md:text-3xl font-extrabold mb-3 neon-text-green text-emerald-400 transition-colors duration-300";
+                statusSubtext.innerText = "Acoustic signature matches personalized baseline. Laminar fluid dynamics detected.";
+                
+                let confidence = 99.9 - (normalizedVal * 5); // Drops slightly as it approaches 50
+                confScore.innerText = confidence.toFixed(1) + "%";
+                confScore.className = "mono text-emerald-400 font-bold text-xl";
+                confBar.style.width = confidence + "%";
+                confBar.className = "bg-gradient-to-r from-emerald-600 to-emerald-400 h-full rounded-full transition-all duration-300";
+                
+                headerBar.className = "absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-emerald-500 opacity-70";
+                logoIcon.classList.remove('text-red-500');
+                logoIcon.classList.add('text-emerald-400');
+                subtitleText.classList.remove('text-red-400');
+                subtitleText.classList.add('text-emerald-400');
+                
+                diagGlow1.className = "absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl transition-colors duration-500";
+                diagGlow2.className = "absolute -bottom-10 -left-10 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl transition-colors duration-500";
+                
+                recPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                recDot.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
+                
+            } else {
+                // ANOMALY STATE (Turbulent Flow)
+                diagPanel.className = "glass rounded-2xl p-8 flex-grow flex flex-col justify-center items-center text-center transition-all duration-500 glow-alert relative overflow-hidden";
+                statusIcon.innerText = "🔴";
+                
+                // Intense jitter for icon
+                let jitterX = (Math.random() - 0.5) * 8 * (normalizedVal - 0.5);
+                let jitterY = (Math.random() - 0.5) * 8 * (normalizedVal - 0.5);
+                statusIcon.style.transform = `scale(1.15) translate(${jitterX}px, ${jitterY}px)`;
+                
+                statusText.innerText = "FLOW ANOMALY DETECTED";
+                statusText.className = "text-2xl md:text-3xl font-extrabold mb-3 neon-text-red text-red-500 transition-colors duration-300";
+                statusSubtext.innerText = "High-frequency turbulence detected. Stricture or severe blockage likely. Immediate review required.";
+                
+                let anomalyConf = 75 + (normalizedVal - 0.5) * 2 * 24.9; // Scales up to 99.9%
+                confScore.innerText = anomalyConf.toFixed(1) + "%";
+                confScore.className = "mono text-red-400 font-bold text-xl";
+                confBar.style.width = anomalyConf + "%";
+                confBar.className = "bg-gradient-to-r from-red-600 to-red-400 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(239,68,68,0.8)]";
+                
+                headerBar.className = "absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-500 to-red-500 opacity-90 animate-pulse";
+                logoIcon.classList.remove('text-emerald-400');
+                logoIcon.classList.add('text-red-500');
+                subtitleText.classList.remove('text-emerald-400');
+                subtitleText.classList.add('text-red-400');
+                
+                diagGlow1.className = "absolute -top-10 -right-10 w-32 h-32 bg-red-500/20 rounded-full blur-3xl transition-colors duration-500";
+                diagGlow2.className = "absolute -bottom-10 -left-10 w-32 h-32 bg-orange-500/20 rounded-full blur-3xl transition-colors duration-500";
+                
+                recPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75";
+                recDot.className = "relative inline-flex rounded-full h-3 w-3 bg-red-500";
+            }
+
+            // --- Math for Signal Generation ---
+            // 1. Base pulse (Heartbeat / fluid pump action)
+            let basePulseFreq = 0.03;
+            let baseAmplitude = 30 - (normalizedVal * 20); // Amplitude drops as it clogs
+            let pulse = Math.sin(time * basePulseFreq) * baseAmplitude;
+            
+            // Add a secondary harmonic to make it look biological/fluidic
+            pulse += Math.sin(time * basePulseFreq * 2.5) * (baseAmplitude * 0.3);
+
+            // 2. Low-level systemic noise
+            let baseNoise = (Math.random() - 0.5) * 4;
+            
+            // 3. Turbulence (Jagged noise that scales exponentially with restriction)
+            let turbulenceAmplitude = val < 50 ? (normalizedVal * 8) : (Math.pow(normalizedVal, 3) * 120);
+            let turbulence = (Math.random() - 0.5) * 2 * turbulenceAmplitude;
+            
+            // 4. High-frequency stricture hiss (appears only at high blockages)
+            let hissAmplitude = val >= 50 ? (normalizedVal - 0.5) * 2 * 50 : 0;
+            // High freq sine combined with random switching
+            let hiss = Math.sin(time * 0.9) * hissAmplitude * (Math.random() > 0.3 ? 1 : -1);
+
+            let currentSignal = pulse + baseNoise + turbulence + hiss;
+            
+            // Update array (shift left)
+            waveHistory.push(currentSignal);
+            if (waveHistory.length > maxHistory) {
+                waveHistory.shift();
+            }
+
+            // --- Draw Live Waveform ---
+            ctx.clearRect(0, 0, width, height);
+            
+            ctx.beginPath();
+            
+            // Styling based on state
+            if (val < 50) {
+                ctx.strokeStyle = '#34d399'; // Emerald-400
+                ctx.shadowColor = 'rgba(16, 185, 129, 0.8)';
+                ctx.lineWidth = 2.5;
+                ctx.shadowBlur = 12;
+            } else {
+                ctx.strokeStyle = '#ef4444'; // Red-500
+                ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
+                ctx.lineWidth = 2 + (normalizedVal * 2.5); // Thicker line when chaotic
+                ctx.shadowBlur = 15 + (normalizedVal * 10);
+            }
+
+            const centerY = height / 2;
+            const stepX = width / (maxHistory - 1);
+            
+            for (let i = 0; i < waveHistory.length; i++) {
+                let x = i * stepX;
+                let y = centerY - waveHistory[i];
+                
+                // Soft clipping to keep within canvas bounds
+                let padding = 10;
+                y = Math.max(padding, Math.min(height - padding, y));
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    // Smooth line with bezier curves for laminar, straight lines for turbulent
+                    if (val < 50) {
+                        let prevX = (i - 1) * stepX;
+                        let prevY = centerY - waveHistory[i - 1];
+                        prevY = Math.max(padding, Math.min(height - padding, prevY));
+                        
+                        let cpX = prevX + (x - prevX) / 2;
+                        ctx.quadraticCurveTo(prevX, prevY, x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+            }
+            ctx.stroke();
+
+            // Draw current point glow head
+            const lastY = Math.max(10, Math.min(height - 10, centerY - waveHistory[waveHistory.length - 1]));
+            ctx.beginPath();
+            ctx.arc(width, lastY, val < 50 ? 4 : 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.stroke();
+
+            // --- Update Spectrogram ---
+            for (let i = 0; i < numBars; i++) {
+                let barHeight = 2; // Minimum height
+                let factor = i / numBars; // 0 (low freq) to 1 (high freq)
+                
+                if (val < 50) {
+                    // Normal state: Heartbeat dominates low freq
+                    if (factor < 0.2) { // 0 - 4kHz approx
+                        // Base pulse energy
+                        barHeight = 5 + Math.random() * 25 * (1 - factor*2);
+                    } else {
+                        // Very low noise floor
+                        barHeight = 2 + Math.random() * 4;
+                    }
+                    
+                    bars[i].className = 'flex-1 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-sm transition-all duration-75';
+                    bars[i].style.boxShadow = '0 -4px 10px rgba(16, 185, 129, 0.3)';
+                    bars[i].style.opacity = '0.9';
+                } else {
+                    // Anomaly state: Broadband turbulence and high freq hissing
+                    if (factor < 0.2) {
+                        // Low end drops slightly in energy but becomes chaotic
+                        barHeight = 10 + Math.random() * 20;
+                    } else if (factor >= 0.2 && factor < 0.6) {
+                        // Mid-band turbulence
+                        barHeight = 15 + Math.random() * 40 * normalizedVal;
+                    } else {
+                        // High freq stricture hiss (shoots up aggressively)
+                        let hissEnergy = (factor - 0.5) * 2; // 0 to 1 scaling in upper half
+                        barHeight = 10 + Math.random() * (hissEnergy * 150 * normalizedVal);
+                    }
+                    
+                    // Color mapping based on energy (height)
+                    if (barHeight > 65) {
+                        bars[i].className = 'flex-1 bg-gradient-to-t from-red-600 to-red-400 rounded-t-sm transition-all duration-75';
+                        bars[i].style.boxShadow = '0 -5px 15px rgba(239, 68, 68, 0.6)';
+                    } else if (barHeight > 35) {
+                        bars[i].className = 'flex-1 bg-gradient-to-t from-orange-600 to-orange-400 rounded-t-sm transition-all duration-75';
+                        bars[i].style.boxShadow = '0 -5px 15px rgba(249, 115, 22, 0.5)';
+                    } else {
+                        bars[i].className = 'flex-1 bg-gradient-to-t from-yellow-600 to-yellow-400 rounded-t-sm transition-all duration-75';
+                        bars[i].style.boxShadow = '0 -4px 10px rgba(234, 179, 8, 0.4)';
+                    }
+                    bars[i].style.opacity = '1';
+                }
+                
+                // Add a tiny bit of smoothing to the visual drop-off so it doesn't flicker too harshly
+                let currentHeight = parseFloat(bars[i].style.height) || 0;
+                if (barHeight < currentHeight) {
+                    barHeight = currentHeight - (currentHeight - barHeight) * 0.5; // decay factor
+                }
+                
+                barHeight = Math.min(100, barHeight);
+                bars[i].style.height = `${barHeight}%`;
+            }
+
+            time += 1;
+            requestAnimationFrame(animate);
+        }
+
+        // Start animation loop
+        animate();
+    </script>
+</body>
+</html>
